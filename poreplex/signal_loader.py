@@ -39,6 +39,7 @@ class SignalLoader:
         self.config = config
         self.fast5prefix = fast5prefix
         self.scaler_model, self.scaler_cfg = self.load_scaler_model()
+        # self.scaler_model, self.scaler_cfg = ""
         self.head_signals = []
         self.head_signal_assoc_reads = []
 
