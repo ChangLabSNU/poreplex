@@ -65,19 +65,9 @@ class WorkerPersistenceStorage:
         }
         storage['kmersize'] = len(storage['kmermodel'].index[0])
 
-        if config['barcoding']:
-            from .barcoding import BarcodeDemultiplexer
-            storage['demuxer'] = BarcodeDemultiplexer(config['demultiplexing'],
-                                                      config['barcoding_quality_filter'])
-
         if config['measure_polya']:
             from .polya import PolyASignalAnalyzer
             storage['polyaanalyzer'] = PolyASignalAnalyzer(config['polya_dwell'])
-
-        if config['albacore_onthefly']:
-            from .basecall_albacore import AlbacoreBroker
-            storage['albacore'] = AlbacoreBroker(config['albacore_configuration'],
-                                                 storage['kmersize'])
 
         from .signal_loader import SignalLoader
         storage['loader'] = SignalLoader(config['signal_processing'], config['inputdir'])
@@ -119,4 +109,3 @@ def load_segmentation_model(modeldata):
     model.bake()
 
     return model
-

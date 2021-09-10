@@ -31,7 +31,6 @@ import logging
 from functools import partial
 from . import *
 from .pipeline import ProcessingSession
-from .alignment_writer import check_minimap2_index
 from .utils import *
 
 VERSION_STRING = """\
@@ -204,33 +203,6 @@ with the fix:
   pip install cython
   pip install git+https://github.com/jmschrei/pomegranate.git\n'''.format(pomegranate_version))
 
-def test_optional_features(config):
-    if config['albacore_onthefly']:
-        config['albacore_configuration'] = os.path.join(
-            config['outputdir'], 'albacore-configuration.cfg')
-
-        # Check the availability and version compatibility in a subprocess to
-        # avoid potential conflicts between duplicated resources in the C++
-        # library memory space when the workers are forked into multiple processes.
-        result = sp.check_output([sys.executable, '-m',
-            'poreplex.basecall_albacore', config['albacore_configuration'],
-            config['flowcell'], config['kit']]).decode().strip()
-        if result.startswith('okay'):
-            config['albacore_version'] = result.split()[1]
-        else:
-            errx('ERROR: ' + result)
-
-    if config['barcoding']:
-        try:
-            from .barcoding import BarcodeDemultiplexer
-        except:
-            errx("ERROR: Barcoding support (--barcoding) requires keras and tensorflow.")
-
-    if config['live']:
-        try:
-            from inotify.adapters import InotifyTree
-        except:
-            errx("ERROR: Live monitoring (--live) requires the inotify module.")
 
 def test_inputs_and_outputs(config):
     if not os.path.isdir(config['inputdir']):
@@ -242,11 +214,11 @@ def test_inputs_and_outputs(config):
         except:
             errx('ERROR: Failed to create the output directory {}.'.format(config['outputdir']))
 
-    if config['minimap2_index']:
-        try:
-            check_minimap2_index(config['minimap2_index'])
-        except:
-            errx('ERROR: Could not load a minimap2 index from {}.'.format(config['minimap2_index']))
+    # if config['minimap2_index']:
+    #     try:
+    #         check_minimap2_index(config['minimap2_index'])
+    #     except:
+    #         errx('ERROR: Could not load a minimap2 index from {}.'.format(config['minimap2_index']))
 
 def fix_options(config):
     printed_any = False
@@ -302,7 +274,6 @@ def main(args):
 
     logger = init_logging(config)
     test_prerequisite_compatibility(config)
-    test_optional_features(config)
 
     logger.info('Starting poreplex version {}'.format(__version__))
     logger.info('Command line: ' + ' '.join(sys.argv))

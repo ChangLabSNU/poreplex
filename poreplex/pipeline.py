@@ -38,22 +38,21 @@ from .io import (
     NanopolishReadDBWriter, create_adapter_dumps_inventory,
     create_events_inventory, FAST5Writer)
 from .signal_analyzer import process_batch
-from .alignment_writer import AlignmentWriter
 from .utils import *
 from .fast5_file import get_read_ids
 
 FAST5_SUFFIX = '.fast5'
 
 
-def force_terminate_executor(executor):
-    executor._call_queue.empty()
+# def force_terminate_executor(executor):
+#     executor._call_queue.empty()
 
-    if executor._processes:
-        alive_pids = set(
-            pid for pid, proc in executor._processes.items()
-            if proc.is_alive())
-        for pid in alive_pids:
-            os.kill(pid, signal.SIGKILL)
+#     if executor._processes:
+#         alive_pids = set(
+#             pid for pid, proc in executor._processes.items()
+#             if proc.is_alive())
+#         for pid in alive_pids:
+#             os.kill(pid, signal.SIGKILL)
 
 
 def scan_dir_recursive_worker(dirname, suffix=FAST5_SUFFIX):
@@ -93,23 +92,23 @@ class ProcessingSession:
         self.config = config
         self.logger = logger
 
-        self.executor_compute = ProcessPoolExecutor(config['parallel'])
-        self.executor_io = ThreadPoolExecutor(2)
-        self.executor_mon = ThreadPoolExecutor(2)
+        # self.executor_compute = ProcessPoolExecutor(config['parallel'])
+        # self.executor_io = ThreadPoolExecutor(2)
+        # self.executor_mon = ThreadPoolExecutor(2)
 
         self.loop = self.fastq_writer = self.fast5_writer = \
             self.alignment_writer = self.npreaddb_writer = None
         self.dashboard = self.pbar = None
 
     def __enter__(self):
-        self.loop = asyncio.get_event_loop()
-        self.executor_compute.__enter__()
-        self.executor_io.__enter__()
-        self.executor_mon.__enter__()
+        # self.loop = asyncio.get_event_loop()
+        # self.executor_compute.__enter__()
+        # self.executor_io.__enter__()
+        # self.executor_mon.__enter__()
 
-        for signame in 'SIGINT SIGTERM'.split():
-            self.loop.add_signal_handler(getattr(signal, signame),
-                                         self.stop, signame)
+        # for signame in 'SIGINT SIGTERM'.split():
+        #     self.loop.add_signal_handler(getattr(signal, signame),
+        #                                  self.stop, signame)
 
         if self.config['fastq_output']:
             self.fastq_writer = FASTQWriter(
@@ -127,12 +126,12 @@ class ProcessingSession:
         self.finalsummary_tracker = FinalSummaryTracker(
             self.config['label_names'], self.config['barcode_names'])
 
-        if self.config['minimap2_index']:
-            self.show_message('==> Loading a minimap2 index file')
-            self.alignment_writer = AlignmentWriter(
-                self.config['minimap2_index'],
-                os.path.join(self.config['outputdir'], 'bam', '{}.bam'),
-                self.config['output_layout'])
+        # if self.config['minimap2_index']:
+        #     self.show_message('==> Loading a minimap2 index file')
+        #     self.alignment_writer = AlignmentWriter(
+        #         self.config['minimap2_index'],
+        #         os.path.join(self.config['outputdir'], 'bam', '{}.bam'),
+        #         self.config['output_layout'])
 
         return self
 
@@ -157,15 +156,15 @@ class ProcessingSession:
             self.alignment_writer.close()
             self.alignment_writer = None
 
-        self.executor_mon.__exit__(*args)
-        self.executor_io.__exit__(*args)
-        self.executor_compute.__exit__(*args)
-        self.loop.close()
+        # self.executor_mon.__exit__(*args)
+        # self.executor_io.__exit__(*args)
+        # self.executor_compute.__exit__(*args)
+        # self.loop.close()
 
     def errx(self, message):
         if self.running:
             errprint(message, end='')
-            self.stop('ERROR')
+            # self.stop('ERROR')
 
     def show_message(self, message):
         if not self.config['quiet']:
@@ -190,19 +189,18 @@ class ProcessingSession:
     def run_in_executor_mon(self, *args):
         return self.loop.run_in_executor(self.executor_mon, *args)
 
-    async def run_process_batch(self, batchid, files):
+    def run_process_batch(self, batchid, files):
         # Wait until the input files become ready if needed
         if self.config['analysis_start_delay'] > 0:
             try:
-                await asyncio.sleep(self.config['analysis_start_delay'])
+                #await asyncio.sleep(self.config['analysis_start_delay'])
+                pass
             except CancelledError:
                 return
 
         self.active_batches += 1
         try:
-
-            results = await self.run_in_executor_compute(
-                process_batch, batchid, files, self.config)
+            results = process_batch(batchid, files, self.config)
 
             if len(results) > 0 and results[0] == -1: # Unhandled exception occurred
                 error_message = results[1]
@@ -230,22 +228,20 @@ class ProcessingSession:
 
             if nd_results:
                 if self.config['fastq_output']:
-                    await self.run_in_executor_io(self.fastq_writer.write_sequences, nd_results)
+                    self.fastq_writer.write_sequences(nd_results)
 
                 if self.config['fast5_output']:
-                    await self.run_in_executor_io(self.fast5_writer.transfer_reads, nd_results)
+                    self.fast5_writer.transfer_reads(nd_results)
 
                 if self.config['nanopolish_output']:
-                    await self.run_in_executor_io(self.npreaddb_writer.write_sequences,
-                                                  nd_results)
+                    self.npreaddb_writer.write_sequences(nd_results)
 
                 if self.config['minimap2_index']:
-                    rescounts = await self.run_in_executor_io(self.alignment_writer.process,
-                                                              nd_results)
+                    rescounts = self.alignment_writer.process(nd_results)
                     if self.dashboard is not None:
                         self.dashboard.feed_mapped(rescounts)
 
-                await self.run_in_executor_io(self.seqsummary_writer.write_results, nd_results)
+                self.seqsummary_writer.write_results(nd_results)
 
                 self.finalsummary_tracker.feed_results(nd_results)
 
@@ -298,9 +294,9 @@ class ProcessingSession:
 
             if reads_to_submit:
                 work = self.run_process_batch(batch_id, reads_to_submit)
-                self.loop.create_task(work)
+                #self.loop.create_task(work)
 
-    async def scan_dir_recursive(self, topdir, dirname=''):
+    def scan_dir_recursive(self, topdir, dirname=''):
         if not self.running:
             return
 
@@ -308,8 +304,7 @@ class ProcessingSession:
 
         try:
             errormsg = None
-            dirs, files = await self.run_in_executor_mon(
-                scan_dir_recursive_worker, os.path.join(topdir, dirname))
+            dirs, files = scan_dir_recursive_worker(os.path.join(topdir, dirname))
         except CancelledError as exc:
             if is_topdir: return
             else: raise exc
@@ -327,7 +322,7 @@ class ProcessingSession:
         try:
             for subdir in dirs:
                 subdirpath = os.path.join(dirname, subdir)
-                await self.scan_dir_recursive(topdir, subdirpath)
+                self.scan_dir_recursive(topdir, subdirpath)
         except CancelledError as exc:
             if is_topdir: return
             else: raise exc
@@ -373,7 +368,8 @@ class ProcessingSession:
                 await asyncio.sleep(0.5)
             except CancelledError:
                 break
-
+            
+            ## reads_queued 가 줄지 않음 
             if self.scan_finished and self.reads_queued <= 0:
                 break
 
@@ -514,7 +510,8 @@ class ProcessingSession:
                 mon_task = sess.loop.create_task(sess.force_flushing_stalled_queue())
             else:
                 # Start monitoring finished processing
-                mon_task = sess.loop.create_task(sess.wait_until_finish())
+                #mon_task = sess.loop.create_task(sess.wait_until_finish())
+                pass
 
             # Start a progress updater for the user
             if config['quiet']:
@@ -524,19 +521,21 @@ class ProcessingSession:
             elif config['live']:
                 sess.loop.create_task(sess.show_progresses_live())
             else:
-                sess.loop.create_task(sess.show_progresses_offline())
+                #sess.loop.create_task(sess.show_progresses_offline())
+                pass
 
             # Start the directory scanner
             scanjob = sess.scan_dir_recursive(config['inputdir'])
-            sess.loop.create_task(scanjob)
+            #sess.loop.create_task(scanjob)
 
             # Start the directory change watcher in the live mode
             if config['live']:
                 livewatcher = sess.live_watch_inputs(config['inputdir'])
-                sess.loop.create_task(livewatcher)
+                #sess.loop.create_task(livewatcher)
 
             try:
-                sess.loop.run_until_complete(mon_task)
+                #sess.loop.run_until_complete(mon_task)
+                pass
             except CancelledError:
                 errprint('\nInterrupted')
             except Exception as exc:
@@ -551,33 +550,33 @@ class ProcessingSession:
                     for line in errf.getvalue().splitlines():
                         logging.error(line)
 
-            sess.terminate_executors()
+            #sess.terminate_executors()
             if sess.dashboard is not None:
                 sess.dashboard.stop()
 
-            for task in asyncio.Task.all_tasks():
-                if not (task.done() or task.cancelled()):
-                    try:
-                        try: task.cancel()
-                        except: pass
-                        sess.loop.run_until_complete(task)
-                    except CancelledError:
-                        errprint('\nInterrupted')
-                    except Exception as exc:
-                        if (isinstance(exc, RuntimeError) and
-                                exc.args[0].startswith('Event loop stopped before Future')):
-                            pass
-                        else:
-                            errprint('\nERROR: ' + str(exc))
+            # for task in asyncio.Task.all_tasks():
+            #     if not (task.done() or task.cancelled()):
+            #         try:
+            #             try: task.cancel()
+            #             except: pass
+            #             sess.loop.run_until_complete(task)
+            #         except CancelledError:
+            #             errprint('\nInterrupted')
+            #         except Exception as exc:
+            #             if (isinstance(exc, RuntimeError) and
+            #                     exc.args[0].startswith('Event loop stopped before Future')):
+            #                 pass
+            #             else:
+            #                 errprint('\nERROR: ' + str(exc))
 
-            if not config['quiet'] and sess.scan_finished:
-                if sess.pbar is not None:
-                    sess.pbar.finish()
-                    sess.show_message('')
+            # if not config['quiet'] and sess.scan_finished:
+            #     if sess.pbar is not None:
+            #         sess.pbar.finish()
+            #         sess.show_message('')
 
-                if sess.reads_found == sess.reads_processed:
-                    sess.finalize_results()
-                    sess.show_message('==> Finished.')
-                    return sess.finalsummary_tracker.print_results
-                else:
-                    sess.show_message('==> Terminated.')
+            #     if sess.reads_found == sess.reads_processed:
+            #         sess.finalize_results()
+            #         sess.show_message('==> Finished.')
+            #         return sess.finalsummary_tracker.print_results
+            #     else:
+            #         sess.show_message('==> Terminated.')

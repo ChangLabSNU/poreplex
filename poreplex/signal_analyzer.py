@@ -84,6 +84,7 @@ class SignalAnalyzer:
         results, loaded = [], []
 
         # Initialize processors and preload signals from fast5
+        ## 만약 구피에서 scaling 한다면... 이부분 & signal_loader 수정 
         nextprocs = []
         prepare_loading = self.loader.prepare_loading
         for f5file, read_id in reads:
@@ -124,8 +125,8 @@ class SignalAnalyzer:
                 siganal.clear_cache()
 
         # Call barcode identities for demultiplexing
-        if self.config['barcoding']:
-            self.demuxer.predict()
+        # if self.config['barcoding']:
+        #     self.demuxer.predict()
 
         # Copy the final results
         for npread in loaded:
@@ -256,21 +257,21 @@ class SignalAnalysis:
                 self.analyzer.polyaanalyzer(self.npread, rough_range, stride)
 
             # Load basecalled events for further jobs working also in base-space
-            events = self.load_events()
-            if self.config['dump_basecalls']:
-                self.analyzer.write_basecalled_events(
-                        self.npread.read_id, events,
-                        self.get_dump_attributes(segments, stride))
+            # events = self.load_events()
+            # if self.config['dump_basecalls']:
+            #     self.analyzer.write_basecalled_events(
+            #             self.npread.read_id, events,
+            #             self.get_dump_attributes(segments, stride))
 
             # Trim adapter sequences referring to the segmentation and events
-            if self.config['trim_adapter']:
-                self.trim_adapter(events, segments, stride)
+            # if self.config['trim_adapter']:
+            #     self.trim_adapter(events, segments, stride)
 
             # Search for the pattern of adapter signals inside the reads
-            if self.config['filter_unsplit_reads']:
-                isunsplit_read = self.detect_unsplit_read(events, segments, stride)
-                if isunsplit_read:
-                    raise SignalAnalysisError('unsplit_read')
+            # if self.config['filter_unsplit_reads']:
+            #     isunsplit_read = self.detect_unsplit_read(events, segments, stride)
+            #     if isunsplit_read:
+            #         raise SignalAnalysisError('unsplit_read')
 
             # Discard short sequences
             if self.npread.sequence is not None:
@@ -442,10 +443,10 @@ class SignalAnalysis:
 
         return False
 
-    def push_barcode_signal(self, signal, segments):
-        adapter_signal = signal[segments['adapter'][0]:segments['adapter'][1]+1]
-        if len(adapter_signal) > 0:
-            self.analyzer.demuxer.push(self.npread, adapter_signal)
+    # def push_barcode_signal(self, signal, segments):
+    #     adapter_signal = signal[segments['adapter'][0]:segments['adapter'][1]+1]
+    #     if len(adapter_signal) > 0:
+    #         self.analyzer.demuxer.push(self.npread, adapter_signal)
 
     def dump_adapter_signal(self, signal, segments, stride):
         adapter_signal = signal[segments['adapter'][0]:segments['adapter'][1]+1]

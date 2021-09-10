@@ -20,7 +20,7 @@
 # THE SOFTWARE.
 #
 
-from .csupport import detect_events
+from poreplex.csupport import detect_events
 import numpy as np
 import pandas as pd
 from scipy.signal import medfilt
@@ -185,4 +185,3 @@ class PolyASignalAnalyzer:
             return [] # no poly(A) found
 
         return events.iloc[polya_start:polya_end+1]
-
