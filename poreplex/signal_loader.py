@@ -38,8 +38,11 @@ class SignalLoader:
     def __init__(self, config, fast5prefix):
         self.config = config
         self.fast5prefix = fast5prefix
-        self.scaler_model, self.scaler_cfg = self.load_scaler_model()
-        # self.scaler_model, self.scaler_cfg = ""
+        self.scaler_cfg = {}
+        self.scaler_cfg['length'] = 30000
+        self.scaler_cfg['stride'] = 15
+        self.scaler_cfg['min_length'] = 9000
+        # self.scaler_model, self.scaler_cfg = self.load_scaler_model()
         self.head_signals = []
         self.head_signal_assoc_reads = []
 
@@ -47,33 +50,33 @@ class SignalLoader:
         del self.head_signals[:]
         del self.head_signal_assoc_reads[:]
 
-    def load_scaler_model(self):
-        model_file = os.path.join(os.path.dirname(__file__),
-                        'presets', self.config['scaler_model'])
+    # def load_scaler_model(self):
+    #     model_file = os.path.join(os.path.dirname(__file__),
+    #                     'presets', self.config['scaler_model'])
 
-        with h5py.File(model_file, 'r') as modelh5:
-            mw = modelh5['model_weights'].attrs
-            scaler_cfg = eval(mw['input_defs'].decode())
-            scaler_cfg['model_version'] = mw['model_version'].decode()
+    #     with h5py.File(model_file, 'r') as modelh5:
+    #         mw = modelh5['model_weights'].attrs
+    #         scaler_cfg = eval(mw['input_defs'].decode())
+    #         scaler_cfg['model_version'] = mw['model_version'].decode()
 
-            xfrm = eval(mw['output_transform'].decode())
-            scaler_cfg['xfrm_scale'] = np.poly1d([xfrm['scale_std'], xfrm['scale_mean']])
-            scaler_cfg['xfrm_shift'] = np.poly1d([xfrm['shift_std'], xfrm['shift_mean']])
+    #         xfrm = eval(mw['output_transform'].decode())
+    #         scaler_cfg['xfrm_scale'] = np.poly1d([xfrm['scale_std'], xfrm['scale_mean']])
+    #         scaler_cfg['xfrm_shift'] = np.poly1d([xfrm['shift_std'], xfrm['shift_mean']])
 
-            # Compute the bounds of predicted outcomes for passing QC. Since the training
-            # data has 1.8 times boosted stdev of the original, the chance of falling
-            # out of this filter should be lower than the setted threshold.
-            qc_threshold_level = self.config['scaler_qc_threshold']
-            qc_threshold_level = [qc_threshold_level, 1 - qc_threshold_level]
-            qc_scale_range = norm.ppf(qc_threshold_level, xfrm['scale_mean'], xfrm['scale_std'])
-            qc_shift_range = norm.ppf(qc_threshold_level, xfrm['shift_mean'], xfrm['shift_std'])
+    #         # Compute the bounds of predicted outcomes for passing QC. Since the training
+    #         # data has 1.8 times boosted stdev of the original, the chance of falling
+    #         # out of this filter should be lower than the setted threshold.
+    #         qc_threshold_level = self.config['scaler_qc_threshold']
+    #         qc_threshold_level = [qc_threshold_level, 1 - qc_threshold_level]
+    #         qc_scale_range = norm.ppf(qc_threshold_level, xfrm['scale_mean'], xfrm['scale_std'])
+    #         qc_shift_range = norm.ppf(qc_threshold_level, xfrm['shift_mean'], xfrm['shift_std'])
 
-            scaler_cfg['qc_scale'] = (
-                lambda x, range=qc_scale_range: (x >= range[0]) & (x <= range[1]))
-            scaler_cfg['qc_shift'] = (
-                lambda x, range=qc_shift_range: (x >= range[0]) & (x <= range[1]))
+    #         scaler_cfg['qc_scale'] = (
+    #             lambda x, range=qc_scale_range: (x >= range[0]) & (x <= range[1]))
+    #         scaler_cfg['qc_shift'] = (
+    #             lambda x, range=qc_shift_range: (x >= range[0]) & (x <= range[1]))
 
-        return keras.models.load_model(model_file), scaler_cfg
+    #     return keras.models.load_model(model_file), scaler_cfg
 
     def prepare_loading(self, filename, read_id):
         npread = NanoporeRead(filename, self.fast5prefix, read_id)
@@ -87,24 +90,35 @@ class SignalLoader:
 
         return npread
 
-    def fit_scalers(self):
+    def fit_scalers(self, batch_chunk_size, batchid):
         if len(self.head_signals) <= 0:
             return
 
-        batch_size = self.config['scaler_maximum_batch_size']
+        # batch_size = self.config['scaler_maximum_batch_size']
         scfg = self.scaler_cfg
 
-        predmtx = self.scaler_model.predict(
-                        np.array(self.head_signals)[:, :, np.newaxis], batch_size)
-        scaling_params = np.transpose([
-            scfg['xfrm_scale'](predmtx[:, 0]), scfg['xfrm_shift'](predmtx[:, 1])])
-        qc_pass_scale = scfg['qc_scale'](scaling_params[:, 0])
-        qc_pass_shift = scfg['qc_shift'](scaling_params[:, 1])
+        # predmtx = self.scaler_model.predict(
+        #                 np.array(self.head_signals)[:, :, np.newaxis], batch_size)
+
+        fit_scaling_param = np.loadtxt(self.fast5prefix + '/fit_scale_result.txt', delimiter='\t', usecols=(1,2))
+ 
+        start = batchid * batch_chunk_size
+        end = (batchid + 1)* batch_chunk_size
+        scfg['scale'] = fit_scaling_param[start:end, 0]
+        scfg['shift'] = fit_scaling_param[start:end, 1]
+
+        scaling_params = np.transpose([scfg['scale'], scfg['shift']])
+        # scaling_params = np.transpose([
+        #     scfg['xfrm_scale'](predmtx[:, 0]), scfg['xfrm_shift'](predmtx[:, 1])])
+        # qc_pass_scale = scfg['qc_scale'](scaling_params[:, 0])
+        # qc_pass_shift = scfg['qc_shift'](scaling_params[:, 1])
+        qc_pass_scale = np.where(scfg['scale'], True, True)
+        qc_pass_shift = np.where(scfg['shift'],True, True)
         qc_pass = qc_pass_scale & qc_pass_shift
 
         for npread, paramset, ok in zip(self.head_signal_assoc_reads, scaling_params, qc_pass):
             if ok:
-                paramset = np.array(paramset, dtype=scfg['dtype'])
+                # paramset = np.array(paramset, dtype=scfg['dtype'])
                 npread.set_scaling_params(paramset)
             else:
                 npread.set_status('scaling_qc_fail', stop=True)

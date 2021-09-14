@@ -84,7 +84,7 @@ class SignalAnalyzer:
         results, loaded = [], []
 
         # Initialize processors and preload signals from fast5
-        ## 만약 구피에서 scaling 한다면... 이부분 & signal_loader 수정 
+        ## 
         nextprocs = []
         prepare_loading = self.loader.prepare_loading
         for f5file, read_id in reads:
@@ -105,7 +105,7 @@ class SignalAnalyzer:
                 results.append(error)
 
         # Determine scaling parameters
-        self.loader.fit_scalers()
+        self.loader.fit_scalers(self.config['batch_chunk_size'], self.batchid)
 
         # Perform the main analysis procedures
         procs, nextprocs = nextprocs, []
