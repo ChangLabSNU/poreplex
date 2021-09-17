@@ -26,6 +26,9 @@ import os
 from io import StringIO
 from itertools import cycle
 from collections import defaultdict
+import time
+import numpy as np
+import pandas as pd
 from . import *
 from .io import (
     FASTQWriter, SequencingSummaryWriter, FinalSummaryTracker,
@@ -36,9 +39,10 @@ from .utils import *
 from .fast5_file import get_read_ids
 
 FAST5_SUFFIX = '.fast5'
+TXT_SUFFIX = '.txt'
 
 def scan_dir_recursive_worker(dirname, suffix=FAST5_SUFFIX):
-    files, dirs = [], []
+    files, dirs, scale_files = [], [], []
     for entryname in os.listdir(dirname):
         if entryname.startswith('.'):
             continue
@@ -46,8 +50,12 @@ def scan_dir_recursive_worker(dirname, suffix=FAST5_SUFFIX):
         fullpath = os.path.join(dirname, entryname)
         if os.path.isdir(fullpath):
             dirs.append(entryname)
-        elif entryname.lower().endswith(suffix):
+        elif entryname.lower().endswith(suffix):    
             files.append(entryname)
+        elif entryname.lower().endswith(TXT_SUFFIX):
+            scale_files.append(entryname.split(TXT_SUFFIX)[0] + FAST5_SUFFIX)
+
+    files = list(set(files) & set(scale_files))
 
     return dirs, files
 
@@ -141,6 +149,13 @@ class ProcessingSession:
 
         self.active_batches += 1
         try:
+
+            start = self.config['batch_chunk_size'] * batchid
+            end = (batchid + 1) * self.config['batch_chunk_size']
+            self.config['fit_scaling_params'] = {}
+            self.config['fit_scaling_params']['scale'] = self.fit_scaling_params.iloc[start:end, 2].to_list()
+            self.config['fit_scaling_params']['shift'] = self.fit_scaling_params.iloc[start:end, 3].to_list()
+
             results = process_batch(batchid, files, self.config)
 
             if len(results) > 0 and results[0] == -1: # Unhandled exception occurred
@@ -232,7 +247,11 @@ class ProcessingSession:
             del self.jobstack[:]
 
             if reads_to_submit:
+                start = time.time()
                 self.run_process_batch(batch_id, reads_to_submit)
+                end = time.time()
+
+                print(f"{batch_id} : {end - start:5f} sec")
 
     def scan_dir_recursive(self, topdir, dirname=''):
         if not self.running:
@@ -252,7 +271,14 @@ class ProcessingSession:
 
         for filename in files:
             filepath = os.path.join(dirname, filename)
-            for readpath in get_read_ids(filepath, topdir):
+            
+            scale_path = os.path.join(self.config['inputdir'], filename.split('.')[0] + '.txt')
+            scaling_param = pd.read_csv(scale_path, sep='\t', usecols=[0, 1, 2], names=['read_id', 'scale', 'shift'])
+
+            readpaths = get_read_ids(filepath, topdir)
+            test = pd.DataFrame(readpaths, columns=['file', 'read_id'])
+            self.fit_scaling_params = test.merge(scaling_param, how='left', on=['read_id'])
+            for readpath in readpaths:
                 self.queue_processing(readpath)
 
         try:
@@ -266,37 +292,6 @@ class ProcessingSession:
         if is_topdir:
             self.flush_jobstack()
             self.scan_finished = True
-
-    async def live_watch_inputs(self, topdir, suffix=FAST5_SUFFIX):
-        from inotify.adapters import InotifyTree
-        from inotify.constants import IN_CLOSE_WRITE, IN_MOVED_TO
-
-        watch_flags = IN_CLOSE_WRITE | IN_MOVED_TO
-        topdir = os.path.abspath(topdir + '/') + '/' # add / for commonprefix
-        is_fast5_to_analyze = lambda fn: fn[:1] != '.' and fn.lower().endswith(suffix)
-        try:
-            evgen = InotifyTree(topdir, mask=watch_flags).event_gen()
-            while True:
-                event = await self.run_in_executor_mon(next, evgen)
-                if event is None:
-                    continue
-
-                header, type_names, path, filename = event
-                if 'IN_ISDIR' in type_names:
-                    continue
-                if header.mask & watch_flags and is_fast5_to_analyze(filename):
-                    common = os.path.commonprefix([topdir, path])
-                    if common != topdir:
-                        errprint("ERROR: Change of {} detected, which is outside "
-                                 "{}.".format(path, topdir))
-                        continue
-                    relpath = os.path.join(path[len(common):], filename)
-                    for readpath in get_read_ids(relpath, topdir):
-                        if readpath not in self.reads_done:
-                            self.queue_processing(readpath)
-
-        except Exception:
-            pass
 
     @classmethod
     def run(kls, config, logging):

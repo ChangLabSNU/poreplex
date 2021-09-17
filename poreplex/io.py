@@ -120,9 +120,10 @@ class FAST5Writer:
 class SequencingSummaryWriter:
 
     SUMMARY_OUTPUT_FIELDS = [
-        'filename', 'read_id', 'run_id', 'channel', 'start_time',
-        'duration', 'num_events', 'sequence_length', 'mean_qscore',
-        'sample_id', 'status', 'label',
+        'filename', 'read_id', 'run_id', 
+        # 'channel', 'start_time',
+        # 'duration', 'num_events', 'sequence_length', 'mean_qscore',
+        # 'sample_id', 'status', 'label',
     ]
 
     def __init__(self, config, output_dir, label_mapping, barcode_mapping):

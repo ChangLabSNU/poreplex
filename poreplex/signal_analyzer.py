@@ -74,7 +74,9 @@ class SignalAnalyzer:
         self.config = config
         self.inputdir = config['inputdir']
         self.outputdir = config['outputdir']
-        self.workerid = sha1(mp.current_process().name.encode()).hexdigest()[:16]
+        ## worker id 삭제 
+        ## self.workerid = sha1(mp.current_process().name.encode()).hexdigest()[:16]
+        self.workerid = '23udjdjdj'
         self.batchid = batchid
         self.formatted_batchid = format(batchid, '08d')
         self.open_dumps()
@@ -84,7 +86,6 @@ class SignalAnalyzer:
         results, loaded = [], []
 
         # Initialize processors and preload signals from fast5
-        ## 
         nextprocs = []
         prepare_loading = self.loader.prepare_loading
         for f5file, read_id in reads:
@@ -105,7 +106,7 @@ class SignalAnalyzer:
                 results.append(error)
 
         # Determine scaling parameters
-        self.loader.fit_scalers(self.config['batch_chunk_size'], self.batchid)
+        self.loader.fit_scalers(self.config['fit_scaling_params'])
 
         # Perform the main analysis procedures
         procs, nextprocs = nextprocs, []
@@ -177,21 +178,21 @@ class SignalAnalyzer:
                                    '/' + self.formatted_batchid)
         return h5, h5group
 
-    def push_adapter_signal_catalog(self, read_id, adapter_start, adapter_end):
-        self.adapter_dump_list.append((read_id, adapter_start, adapter_end))
+    # def push_adapter_signal_catalog(self, read_id, adapter_start, adapter_end):
+    #     self.adapter_dump_list.append((read_id, adapter_start, adapter_end))
 
-    def write_basecalled_events(self, read_id, events, attrs):
-        dataset = np.empty(len(events), dtype=self.EVENT_DUMP_FIELDS)
-        for name, dtype in self.EVENT_DUMP_FIELDS:
-            dataset[name] = events[name]
-        try:
-            self.basecall_dump_group[read_id] = dataset
-            objattrs = self.basecall_dump_group[read_id].attrs
-            for attrname, attrvalue in attrs:
-                objattrs[attrname] = attrvalue
-        except RuntimeError:
-            if read_id not in self.basecall_dump_group:
-                raise
+    # def write_basecalled_events(self, read_id, events, attrs):
+    #     dataset = np.empty(len(events), dtype=self.EVENT_DUMP_FIELDS)
+    #     for name, dtype in self.EVENT_DUMP_FIELDS:
+    #         dataset[name] = events[name]
+    #     try:
+    #         self.basecall_dump_group[read_id] = dataset
+    #         objattrs = self.basecall_dump_group[read_id].attrs
+    #         for attrname, attrvalue in attrs:
+    #             objattrs[attrname] = attrvalue
+    #     except RuntimeError:
+    #         if read_id not in self.basecall_dump_group:
+    #             raise
 
     def __enter__(self):
         return self
@@ -241,8 +242,8 @@ class SignalAnalysis:
                 raise SignalAnalysisError('adapter_not_detected')
 
             # Dump adapter signals on request from the command line
-            if self.config['dump_adapter_signals']:
-                self.dump_adapter_signal(signal, segments, stride)
+            # if self.config['dump_adapter_signals']:
+            #     self.dump_adapter_signal(signal, segments, stride)
 
             # Queue a barcode identification task with signal
             if self.config['barcoding']:
@@ -286,28 +287,28 @@ class SignalAnalysis:
         else:
             self.npread.set_label('pass')
 
-    def get_dump_attributes(self, segments, stride):
-        attrlist = []
+    # def get_dump_attributes(self, segments, stride):
+    #     attrlist = []
 
-        if self.npread.scaling_params is not None:
-            sp_scale, sp_shift = self.npread.scaling_params
-            attrlist.append(('signal_scale', sp_scale))
-            attrlist.append(('signal_shift', sp_shift))
+    #     if self.npread.scaling_params is not None:
+    #         sp_scale, sp_shift = self.npread.scaling_params
+    #         attrlist.append(('signal_scale', sp_scale))
+    #         attrlist.append(('signal_shift', sp_shift))
 
-        if 'adapter' in segments:
-            attrlist.append(('adapter_begin', np.uint32(segments['adapter'][0] * stride)))
-            attrlist.append(('adapter_end', np.uint32((segments['adapter'][1] + 1) * stride)))
+    #     if 'adapter' in segments:
+    #         attrlist.append(('adapter_begin', np.uint32(segments['adapter'][0] * stride)))
+    #         attrlist.append(('adapter_end', np.uint32((segments['adapter'][1] + 1) * stride)))
 
-        if self.npread.polya is not None:
-            polya = self.npread.polya
-            if 'polya-tail' in segments:
-                attrlist.append(('polya_end_debug',
-                                 np.uint32((segments['polya-tail'][1] + 1) * stride)))
-            attrlist.append(('polya_begin', np.uint32(polya['begin'])))
-            attrlist.append(('polya_end', np.uint32(polya['end'])))
-            attrlist.append(('spikes', repr(polya['spikes']).encode()))
+    #     if self.npread.polya is not None:
+    #         polya = self.npread.polya
+    #         if 'polya-tail' in segments:
+    #             attrlist.append(('polya_end_debug',
+    #                              np.uint32((segments['polya-tail'][1] + 1) * stride)))
+    #         attrlist.append(('polya_begin', np.uint32(polya['begin'])))
+    #         attrlist.append(('polya_end', np.uint32(polya['end'])))
+    #         attrlist.append(('spikes', repr(polya['spikes']).encode()))
 
-        return attrlist
+    #     return attrlist
 
     def load_events(self):
         if self.config['albacore_onthefly']: # Call albacore to get basecalls.
@@ -326,23 +327,23 @@ class SignalAnalysis:
 
         return events
 
-    def trim_adapter(self, events, segments, elspan):
-        sequence = self.npread.sequence
-        if sequence is not None:
-            return
+    # def trim_adapter(self, events, segments, elspan):
+    #     sequence = self.npread.sequence
+    #     if sequence is not None:
+    #         return
 
-        adapter_end = segments['adapter'][1] * elspan
-        kmer_lead_size = self.analyzer.kmersize // 2
-        adapter_events = events[events['start'] <= adapter_end]
-        if len(adapter_events) <= 0:
-            return
+    #     adapter_end = segments['adapter'][1] * elspan
+    #     kmer_lead_size = self.analyzer.kmersize // 2
+    #     adapter_events = events[events['start'] <= adapter_end]
+    #     if len(adapter_events) <= 0:
+    #         return
 
-        adapter_basecall_length = adapter_events['move'].sum() + kmer_lead_size
+    #     adapter_basecall_length = adapter_events['move'].sum() + kmer_lead_size
 
-        if adapter_basecall_length > len(sequence[0]):
-            raise SignalAnalysisError('basecall_table_incomplete')
-        elif adapter_basecall_length > 0:
-            self.npread.set_adapter_trimming_length(adapter_basecall_length)
+    #     if adapter_basecall_length > len(sequence[0]):
+    #         raise SignalAnalysisError('basecall_table_incomplete')
+    #     elif adapter_basecall_length > 0:
+    #         self.npread.set_adapter_trimming_length(adapter_basecall_length)
 
     def detect_segments(self, signal, elspan):
         scan_limit = self.config['segmentation']['segmentation_scan_limit'] // elspan
@@ -448,21 +449,21 @@ class SignalAnalysis:
     #     if len(adapter_signal) > 0:
     #         self.analyzer.demuxer.push(self.npread, adapter_signal)
 
-    def dump_adapter_signal(self, signal, segments, stride):
-        adapter_signal = signal[segments['adapter'][0]:segments['adapter'][1]+1]
-        if len(adapter_signal) > 0:
-            read_id = self.npread.read_id
-            try:
-                self.analyzer.adapter_dump_group.create_dataset(read_id,
-                    shape=(len(adapter_signal),), dtype=np.float32,
-                    data=adapter_signal)
-            except:
-                if read_id in self.analyzer.adapter_dump_group:
-                    return
-                raise
+    # def dump_adapter_signal(self, signal, segments, stride):
+    #     adapter_signal = signal[segments['adapter'][0]:segments['adapter'][1]+1]
+    #     if len(adapter_signal) > 0:
+    #         read_id = self.npread.read_id
+    #         try:
+    #             self.analyzer.adapter_dump_group.create_dataset(read_id,
+    #                 shape=(len(adapter_signal),), dtype=np.float32,
+    #                 data=adapter_signal)
+    #         except:
+    #             if read_id in self.analyzer.adapter_dump_group:
+    #                 return
+    #             raise
 
-            start_pos = segments['adapter'][0] * stride
-            end_pos = (segments['adapter'][1] + 1) * stride
+    #         start_pos = segments['adapter'][0] * stride
+    #         end_pos = (segments['adapter'][1] + 1) * stride
 
-            self.analyzer.push_adapter_signal_catalog(read_id, start_pos, end_pos)
+    #         self.analyzer.push_adapter_signal_catalog(read_id, start_pos, end_pos)
 
