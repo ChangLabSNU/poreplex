@@ -157,18 +157,18 @@ class SignalAnalyzer:
     def open_dumps(self):
         self.EVENT_DUMP_FIELDS[4] = (self.EVENT_DUMP_FIELDS[4][0], 'S{}'.format(self.kmersize))
 
-        if self.config['dump_adapter_signals']:
-            self.adapter_dump_file, self.adapter_dump_group = \
-                self.open_dump_file('adapter-dumps', 'adapter')
-            self.adapter_dump_list = []
-        else:
-            self.adapter_dump_file = self.adapter_dump_group = None
+        # if self.config['dump_adapter_signals']:
+        #     self.adapter_dump_file, self.adapter_dump_group = \
+        #         self.open_dump_file('adapter-dumps', 'adapter')
+        #     self.adapter_dump_list = []
+        # else:
+        self.adapter_dump_file = self.adapter_dump_group = None
 
-        if self.config['dump_basecalls']:
-            self.basecall_dump_file, self.basecall_dump_group = \
-                self.open_dump_file('events', 'basecalled_events')
-        else:
-            self.basecall_dump_file = self.basecall_dump_group = None
+        # if self.config['dump_basecalls']:
+        #     self.basecall_dump_file, self.basecall_dump_group = \
+        #         self.open_dump_file('events', 'basecalled_events')
+        # else:
+        self.basecall_dump_file = self.basecall_dump_group = None
 
     def open_dump_file(self, subdir, parentgroup):
         h5filename = os.path.join(self.outputdir, subdir,

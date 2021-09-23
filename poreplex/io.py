@@ -37,41 +37,41 @@ from .utils import ensure_dir_exists
 from .fast5_file import Fast5Reader, DuplicatedReadError
 
 
-class FASTQWriter:
+# class FASTQWriter:
 
-    def __init__(self, output_dir, output_layout):
-        self.output_dir = output_dir
-        self.output_layout = output_layout
-        self.lock = Lock()
+#     def __init__(self, output_dir, output_layout):
+#         self.output_dir = output_dir
+#         self.output_layout = output_layout
+#         self.lock = Lock()
 
-        self.open_streams()
+#         self.open_streams()
 
-    def open_streams(self):
-        self.streams = {
-            int_name: BGZFile(self.get_output_path(name), 'w')
-            for int_name, name in self.output_layout.items()}
+#     def open_streams(self):
+#         self.streams = {
+#             int_name: BGZFile(self.get_output_path(name), 'w')
+#             for int_name, name in self.output_layout.items()}
 
-    def close(self):
-        for stream in self.streams.values():
-            stream.close()
+#     def close(self):
+#         for stream in self.streams.values():
+#             stream.close()
 
-    def get_output_path(self, name):
-        output_path = os.path.join(self.output_dir, 'fastq', name + '.fastq.gz')
-        ensure_dir_exists(output_path)
-        return output_path
+#     def get_output_path(self, name):
+#         output_path = os.path.join(self.output_dir, 'fastq', name + '.fastq.gz')
+#         ensure_dir_exists(output_path)
+#         return output_path
 
-    def write_sequences(self, procresult):
-        with self.lock:
-            for entry in procresult:
-                if entry.get('sequence') is not None:
-                    seq, qual, adapter_length = entry['sequence']
-                    if adapter_length > 0:
-                        seq = seq[:-adapter_length]
-                        qual = qual[:-adapter_length]
+#     def write_sequences(self, procresult):
+#         with self.lock:
+#             for entry in procresult:
+#                 if entry.get('sequence') is not None:
+#                     seq, qual, adapter_length = entry['sequence']
+#                     if adapter_length > 0:
+#                         seq = seq[:-adapter_length]
+#                         qual = qual[:-adapter_length]
 
-                    output_name = entry['label'], entry.get('barcode')
-                    formatted = '@{}\n{}\n+\n{}\n'.format(entry['read_id'], seq, qual)
-                    self.streams[output_name].write(formatted.encode('ascii'))
+#                     output_name = entry['label'], entry.get('barcode')
+#                     formatted = '@{}\n{}\n+\n{}\n'.format(entry['read_id'], seq, qual)
+#                     self.streams[output_name].write(formatted.encode('ascii'))
 
 
 class FAST5Writer:
@@ -120,7 +120,8 @@ class FAST5Writer:
 class SequencingSummaryWriter:
 
     SUMMARY_OUTPUT_FIELDS = [
-        'filename', 'read_id', 'run_id', 
+        'filename', 'read_id', 
+        # 'run_id', 
         # 'channel', 'start_time',
         # 'duration', 'num_events', 'sequence_length', 'mean_qscore',
         # 'sample_id', 'status', 'label',
@@ -185,53 +186,53 @@ class SequencingSummaryWriter:
                           file=self.file, sep='\t')
 
 
-class NanopolishReadDBWriter:
+# class NanopolishReadDBWriter:
 
-    def __init__(self, output_dir, output_layout):
-        self.output_layout = output_layout
-        self.output_dir = os.path.join(output_dir, 'nanopolish')
-        self.seqfiles, self.dbfiles = self.open_streams()
-        self.lock = Lock()
+#     def __init__(self, output_dir, output_layout):
+#         self.output_layout = output_layout
+#         self.output_dir = os.path.join(output_dir, 'nanopolish')
+#         self.seqfiles, self.dbfiles = self.open_streams()
+#         self.lock = Lock()
 
-    def open_streams(self):
-        seqfiles, dbfiles = {}, {}
-        for groupid, name in self.output_layout.items():
-            filepath = os.path.join(self.output_dir, name + '.fasta')
-            ensure_dir_exists(filepath)
-            seqfiles[groupid] = open(filepath, 'w')
-            dbfiles[groupid] = open(filepath + '.index.readdb', 'w')
-        return seqfiles, dbfiles
+#     def open_streams(self):
+#         seqfiles, dbfiles = {}, {}
+#         for groupid, name in self.output_layout.items():
+#             filepath = os.path.join(self.output_dir, name + '.fasta')
+#             ensure_dir_exists(filepath)
+#             seqfiles[groupid] = open(filepath, 'w')
+#             dbfiles[groupid] = open(filepath + '.index.readdb', 'w')
+#         return seqfiles, dbfiles
 
-    def close(self):
-        for groupid, f in list(self.seqfiles.items()):
-            f.close()
-            del self.seqfiles[groupid]
+#     def close(self):
+#         for groupid, f in list(self.seqfiles.items()):
+#             f.close()
+#             del self.seqfiles[groupid]
 
-        for groupid, f in list(self.dbfiles.items()):
-            f.close()
-            del self.dbfiles[groupid]
+#         for groupid, f in list(self.dbfiles.items()):
+#             f.close()
+#             del self.dbfiles[groupid]
 
-        # Create bgzipped-fasta and indices
-        for groupid, name in self.output_layout.items():
-            inputfile = os.path.join(self.output_dir, name + '.fasta')
-            if os.path.getsize(inputfile) > 0:
-                bgzippedfile = inputfile + '.index'
-                copyfileobj(open(inputfile, 'rb'), BGZFile(bgzippedfile, 'w'))
-                faidx(bgzippedfile)
+#         # Create bgzipped-fasta and indices
+#         for groupid, name in self.output_layout.items():
+#             inputfile = os.path.join(self.output_dir, name + '.fasta')
+#             if os.path.getsize(inputfile) > 0:
+#                 bgzippedfile = inputfile + '.index'
+#                 copyfileobj(open(inputfile, 'rb'), BGZFile(bgzippedfile, 'w'))
+#                 faidx(bgzippedfile)
 
-    def write_sequences(self, procresult):
-        with self.lock:
-            for entry in procresult:
-                if entry.get('sequence') is not None:
-                    mappingkey = entry['label'], entry.get('barcode')
+#     def write_sequences(self, procresult):
+#         with self.lock:
+#             for entry in procresult:
+#                 if entry.get('sequence') is not None:
+#                     mappingkey = entry['label'], entry.get('barcode')
 
-                    formatted = '>{}\n{}\n'.format(entry['read_id'], entry['sequence'][0])
-                    self.seqfiles[mappingkey].write(formatted)
+#                     formatted = '>{}\n{}\n'.format(entry['read_id'], entry['sequence'][0])
+#                     self.seqfiles[mappingkey].write(formatted)
 
-                    fast5_relpath = os.path.join('fast5', self.output_layout[mappingkey],
-                                                 entry['filename'])
-                    formatted = '{}\t{}\n'.format(entry['read_id'], fast5_relpath)
-                    self.dbfiles[mappingkey].write(formatted)
+#                     fast5_relpath = os.path.join('fast5', self.output_layout[mappingkey],
+#                                                  entry['filename'])
+#                     formatted = '{}\t{}\n'.format(entry['read_id'], fast5_relpath)
+#                     self.dbfiles[mappingkey].write(formatted)
 
 
 class FinalSummaryTracker:

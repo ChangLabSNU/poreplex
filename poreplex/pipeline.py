@@ -31,8 +31,8 @@ import numpy as np
 import pandas as pd
 from . import *
 from .io import (
-    FASTQWriter, SequencingSummaryWriter, FinalSummaryTracker,
-    NanopolishReadDBWriter, create_adapter_dumps_inventory,
+    SequencingSummaryWriter, FinalSummaryTracker,
+    create_adapter_dumps_inventory,
     create_events_inventory, FAST5Writer)
 from .signal_analyzer import process_batch
 from .utils import *
@@ -60,10 +60,10 @@ def scan_dir_recursive_worker(dirname, suffix=FAST5_SUFFIX):
     return dirs, files
 
 
-def show_memory_usage():
-    usages = open('/proc/self/statm').read().split()
-    print('{:05d} MEMORY total={} RSS={} shared={} data={}'.format(
-            batchid, usages[0], usages[1], usages[2], usages[4]))
+# def show_memory_usage():
+#     usages = open('/proc/self/statm').read().split()
+#     print('{:05d} MEMORY total={} RSS={} shared={} data={}'.format(
+#             batchid, usages[0], usages[1], usages[2], usages[4]))
 
 
 class ProcessingSession:
@@ -87,16 +87,16 @@ class ProcessingSession:
         self.dashboard = self.pbar = None
 
     def __enter__(self):
-        if self.config['fastq_output']:
-            self.fastq_writer = FASTQWriter(
-                self.config['outputdir'], self.config['output_layout'])
+        # if self.config['fastq_output']:
+        #     self.fastq_writer = FASTQWriter(
+        #         self.config['outputdir'], self.config['output_layout'])
         if self.config['fast5_output']:
             self.fast5_writer = FAST5Writer(
                 self.config['outputdir'], self.config['output_layout'],
                 self.config['inputdir'], self.config['fast5_batch_size'])
-        if self.config['nanopolish_output']:
-            self.npreaddb_writer = NanopolishReadDBWriter(
-                self.config['outputdir'], self.config['output_layout'])
+        # if self.config['nanopolish_output']:
+        #     self.npreaddb_writer = NanopolishReadDBWriter(
+        #         self.config['outputdir'], self.config['output_layout'])
         self.seqsummary_writer = SequencingSummaryWriter(
             self.config, self.config['outputdir'], self.config['label_names'],
             self.config['barcode_names'])
@@ -183,19 +183,19 @@ class ProcessingSession:
                 self.error_status_counts[result['status']] += 1
 
             if nd_results:
-                if self.config['fastq_output']:
-                    self.fastq_writer.write_sequences(nd_results)
+                # if self.config['fastq_output']:
+                #     self.fastq_writer.write_sequences(nd_results)
 
                 if self.config['fast5_output']:
                     self.fast5_writer.transfer_reads(nd_results)
 
-                if self.config['nanopolish_output']:
-                    self.npreaddb_writer.write_sequences(nd_results)
+                # if self.config['nanopolish_output']:
+                #     self.npreaddb_writer.write_sequences(nd_results)
 
-                if self.config['minimap2_index']:
-                    rescounts = self.alignment_writer.process(nd_results)
-                    if self.dashboard is not None:
-                        self.dashboard.feed_mapped(rescounts)
+                # if self.config['minimap2_index']:
+                #     rescounts = self.alignment_writer.process(nd_results)
+                #     if self.dashboard is not None:
+                #         self.dashboard.feed_mapped(rescounts)
 
                 self.seqsummary_writer.write_results(nd_results)
 
