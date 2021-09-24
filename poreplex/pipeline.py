@@ -78,6 +78,7 @@ class ProcessingSession:
         self.active_batches = 0
         self.error_status_counts = defaultdict(int)
         self.jobstack = []
+        self.fit_scaling_params = pd.DataFrame()
 
         self.config = config
         self.logger = logger
@@ -276,8 +277,8 @@ class ProcessingSession:
             scaling_param = pd.read_csv(scale_path, sep='\t', usecols=[0, 1, 2], names=['read_id', 'scale', 'shift'])
 
             readpaths = get_read_ids(filepath, topdir)
-            test = pd.DataFrame(readpaths, columns=['file', 'read_id'])
-            self.fit_scaling_params = test.merge(scaling_param, how='left', on=['read_id'])
+            read_df = pd.DataFrame(readpaths, columns=['file', 'read_id'])
+            self.fit_scaling_params = self.fit_scaling_params.append(read_df.merge(scaling_param, how='left', on=['read_id']))
             for readpath in readpaths:
                 self.queue_processing(readpath)
 

@@ -22,10 +22,7 @@
 
 from weakref import proxy
 from itertools import groupby
-import multiprocessing as mp
 import numpy as np
-import pandas as pd
-from hashlib import sha1
 from io import StringIO
 import traceback
 import h5py
@@ -246,8 +243,8 @@ class SignalAnalysis:
             #     self.dump_adapter_signal(signal, segments, stride)
 
             # Queue a barcode identification task with signal
-            if self.config['barcoding']:
-                self.push_barcode_signal(signal, segments)
+            # if self.config['barcoding']:
+            #     self.push_barcode_signal(signal, segments)
 
             # Measure poly(A) tail signals
             if self.config['measure_polya']:
