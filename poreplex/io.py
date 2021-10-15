@@ -20,12 +20,10 @@
 # THE SOFTWARE.
 #
 
-from pysam import BGZFile, faidx
 from glob import glob
 from functools import partial
 from itertools import count
 from collections import defaultdict
-from shutil import copyfileobj
 from threading import Lock
 import h5py
 import numpy as np
@@ -35,44 +33,6 @@ import os
 from . import OUTPUT_NAME_FAILED
 from .utils import ensure_dir_exists
 from .fast5_file import Fast5Reader, DuplicatedReadError
-
-
-# class FASTQWriter:
-
-#     def __init__(self, output_dir, output_layout):
-#         self.output_dir = output_dir
-#         self.output_layout = output_layout
-#         self.lock = Lock()
-
-#         self.open_streams()
-
-#     def open_streams(self):
-#         self.streams = {
-#             int_name: BGZFile(self.get_output_path(name), 'w')
-#             for int_name, name in self.output_layout.items()}
-
-#     def close(self):
-#         for stream in self.streams.values():
-#             stream.close()
-
-#     def get_output_path(self, name):
-#         output_path = os.path.join(self.output_dir, 'fastq', name + '.fastq.gz')
-#         ensure_dir_exists(output_path)
-#         return output_path
-
-#     def write_sequences(self, procresult):
-#         with self.lock:
-#             for entry in procresult:
-#                 if entry.get('sequence') is not None:
-#                     seq, qual, adapter_length = entry['sequence']
-#                     if adapter_length > 0:
-#                         seq = seq[:-adapter_length]
-#                         qual = qual[:-adapter_length]
-
-#                     output_name = entry['label'], entry.get('barcode')
-#                     formatted = '@{}\n{}\n+\n{}\n'.format(entry['read_id'], seq, qual)
-#                     self.streams[output_name].write(formatted.encode('ascii'))
-
 
 class FAST5Writer:
 
@@ -121,26 +81,14 @@ class SequencingSummaryWriter:
 
     SUMMARY_OUTPUT_FIELDS = [
         'filename', 'read_id', 
-        # 'run_id', 
-        # 'channel', 'start_time',
-        # 'duration', 'num_events', 'sequence_length', 'mean_qscore',
-        # 'sample_id', 'status', 'label',
     ]
 
-    def __init__(self, config, output_dir, label_mapping, barcode_mapping):
+    def __init__(self, config, output_dir, label_mapping):
         self.file = open(os.path.join(output_dir, 'sequencing_summary.txt'), 'w')
         self.lock = Lock()
         self.label_mapping = label_mapping
 
         self.output_fields = self.SUMMARY_OUTPUT_FIELDS[:]
-
-        if config['barcoding']:
-            self.barcode_mapping = barcode_mapping
-            self.output_fields.extend(['barcode', 'barcode_score',
-                                        #'barcode_guess'
-                                      ])
-        else:
-            self.barcode_mapping = None
 
         if config['measure_polya']:
             self.polya_enabled = True
@@ -149,14 +97,8 @@ class SequencingSummaryWriter:
             self.polya_enabled = False
 
         if config['fast5_output']:
-            if config['barcoding']:
-                self.format_filename = (lambda entry:
-                    os.path.join('fast5', entry['label'],
-                                 self.barcode_mapping[entry.get('barcode')],
-                                 entry['filename']))
-            else:
-                self.format_filename = (lambda entry:
-                    os.path.join('fast5', entry['label'], entry['filename']))
+            self.format_filename = (lambda entry:
+                os.path.join('fast5', entry['label'], entry['filename']))
         else:
             self.format_filename = lambda entry: entry['filename']
 
@@ -172,11 +114,6 @@ class SequencingSummaryWriter:
                     output_entry = entry.copy()
                     output_entry['label'] = self.label_mapping[entry['label']]
                     output_entry['filename'] = self.format_filename(output_entry)
-                    if self.barcode_mapping is not None:
-                        output_entry['barcode'] = self.barcode_mapping[entry.get('barcode')]
-                        output_entry['barcode_score'] = entry.get('barcode_score', 0)
-                        #output_entry['barcode_guess'] = self.barcode_mapping[
-                        #    entry.get('barcode_guess')]
                     if self.polya_enabled:
                         output_entry['polya_dwell'] = (
                             format(entry['polya']['dwell_time'], '.4f')
@@ -184,56 +121,6 @@ class SequencingSummaryWriter:
 
                     print(*[output_entry[f] for f in self.output_fields],
                           file=self.file, sep='\t')
-
-
-# class NanopolishReadDBWriter:
-
-#     def __init__(self, output_dir, output_layout):
-#         self.output_layout = output_layout
-#         self.output_dir = os.path.join(output_dir, 'nanopolish')
-#         self.seqfiles, self.dbfiles = self.open_streams()
-#         self.lock = Lock()
-
-#     def open_streams(self):
-#         seqfiles, dbfiles = {}, {}
-#         for groupid, name in self.output_layout.items():
-#             filepath = os.path.join(self.output_dir, name + '.fasta')
-#             ensure_dir_exists(filepath)
-#             seqfiles[groupid] = open(filepath, 'w')
-#             dbfiles[groupid] = open(filepath + '.index.readdb', 'w')
-#         return seqfiles, dbfiles
-
-#     def close(self):
-#         for groupid, f in list(self.seqfiles.items()):
-#             f.close()
-#             del self.seqfiles[groupid]
-
-#         for groupid, f in list(self.dbfiles.items()):
-#             f.close()
-#             del self.dbfiles[groupid]
-
-#         # Create bgzipped-fasta and indices
-#         for groupid, name in self.output_layout.items():
-#             inputfile = os.path.join(self.output_dir, name + '.fasta')
-#             if os.path.getsize(inputfile) > 0:
-#                 bgzippedfile = inputfile + '.index'
-#                 copyfileobj(open(inputfile, 'rb'), BGZFile(bgzippedfile, 'w'))
-#                 faidx(bgzippedfile)
-
-#     def write_sequences(self, procresult):
-#         with self.lock:
-#             for entry in procresult:
-#                 if entry.get('sequence') is not None:
-#                     mappingkey = entry['label'], entry.get('barcode')
-
-#                     formatted = '>{}\n{}\n'.format(entry['read_id'], entry['sequence'][0])
-#                     self.seqfiles[mappingkey].write(formatted)
-
-#                     fast5_relpath = os.path.join('fast5', self.output_layout[mappingkey],
-#                                                  entry['filename'])
-#                     formatted = '{}\t{}\n'.format(entry['read_id'], fast5_relpath)
-#                     self.dbfiles[mappingkey].write(formatted)
-
 
 class FinalSummaryTracker:
 

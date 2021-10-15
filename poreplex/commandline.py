@@ -23,10 +23,8 @@
 import argparse
 import sys
 import os
-import time
 import yaml
 import shutil
-import subprocess as sp
 import logging
 from functools import partial
 from . import *
@@ -112,12 +110,7 @@ def create_output_directories(config):
 
     subdirs = []
     conditional_subdirs = [
-        # ('fastq_output', 'fastq'),
         ('fast5_output', 'fast5'),
-        # ('nanopolish_output', 'nanopolish'),
-        # ('minimap2_index', 'bam'),
-        # ('dump_adapter_signals', 'adapter-dumps'),
-        # ('dump_basecalls', 'events'),
     ]
     for condition, subdir in conditional_subdirs:
         if config[condition]:
@@ -136,24 +129,9 @@ def create_output_directories(config):
 def setup_output_name_mapping(config):
     label_names = {'fail': OUTPUT_NAME_FAILED, 'pass': OUTPUT_NAME_PASSED}
 
-    # if config['filter_unsplit_reads']:
-    #     label_names['artifact'] = OUTPUT_NAME_ARTIFACT
-
-    if config['barcoding']:
-        num_barcodes = config['demultiplexing']['number_of_barcodes']
-        barcode_names = {None: OUTPUT_NAME_UNDETERMINED}
-        for i in range(num_barcodes):
-            barcode_names[i] = OUTPUT_NAME_BARCODES.format(n=i + 1)
-
-        layout_maps = {
-            (label, bc): os.path.join(labelname, bcname)
-            for label, labelname in label_names.items()
-            for bc, bcname in barcode_names.items()
-        }
-    else:
-        barcode_names = {None: OUTPUT_NAME_BARCODING_OFF}
-        layout_maps = {
-            (label, None): labelname for label, labelname in label_names.items()}
+    barcode_names = {None: OUTPUT_NAME_BARCODING_OFF}
+    layout_maps = {
+        (label, None): labelname for label, labelname in label_names.items()}
 
     return label_names, barcode_names, layout_maps
 
@@ -171,21 +149,8 @@ def show_configuration(config, output):
       '(live, {} sec delay)'.format(config['analysis_start_delay'])
       if config['live'] else '')
     _(" * Output:", config['outputdir'])
-    _(" * Processes:", config['parallel'])
     _(" * Presets:", config['preset_name'])
-    # _(" * Basecall on-the-fly:\t",
-    #     'Yes (albacore {})'.format(config['albacore_version'])
-        # if config['albacore_onthefly'] else 'No (use previous analyses)')
-    # _(" * Trim 3' adapter:\t", bool2yn(config['trim_adapter']))
-    # _(" * Filter concatenated read:", bool2yn(config['filter_unsplit_reads']))
-    # _(" * Separate by barcode:\t", bool2yn(config['barcoding']))
-    # _(" * Real-time alignment:\t", bool2yn(config['minimap2_index']))
-    # _(" * FASTQ in output:\t", bool2yn(config['fastq_output']))
     _(" * FAST5 in output:\t", bool2yn(config['fast5_output']))
-    # _(" * Basecall table in output:", bool2yn(config['dump_basecalls']))
-
-    # if config['dump_adapter_signals']:
-    #     _(" * Dump adapter signals for training:", "Yes")
     _("===========================================================")
     _("")
 
@@ -214,20 +179,8 @@ def test_inputs_and_outputs(config):
         except:
             errx('ERROR: Failed to create the output directory {}.'.format(config['outputdir']))
 
-    # if config['minimap2_index']:
-    #     try:
-    #         check_minimap2_index(config['minimap2_index'])
-    #     except:
-    #         errx('ERROR: Could not load a minimap2 index from {}.'.format(config['minimap2_index']))
-
 def fix_options(config):
     printed_any = False
-
-    # if config['dashboard'] and not config['minimap2_index']:
-    #     errprint('WARNING: Dashboard is turned off because it is not informative '
-    #              'without sequence alignments.')
-    #     config['dashboard'] = False
-    #     printed_any = True
 
     if printed_any:
         errprint('')
@@ -239,35 +192,18 @@ def main(args):
     config = load_config(args)
     config['quiet'] = args.quiet
     config['interactive'] = not args.yes
-    config['parallel'] = args.parallel
     config['inputdir'] = args.input
     config['outputdir'] = args.output
     config['live'] = args.live
-    # config['analysis_start_delay'] = args.live_delay if args.live else 0
-    # config['dashboard'] = args.dashboard
-    # config['contig_aliases'] = args.contig_aliases
     config['tmpdir'] = args.tmpdir if args.tmpdir else os.path.join(args.output, 'tmp')
-    # config['cleanup_tmpdir'] = False # will be changed during creation of output dirs
     config['barcoding'] = args.barcoding
-    # config['barcoding_quality_filter'] = args.barcoding_quality_filter
     config['measure_polya'] = args.polya
-    # config['filter_unsplit_reads'] = args.filter_chimera
     config['batch_chunk_size'] = args.batch_size
-    # config['albacore_onthefly'] = args.basecall
-    # config['dump_adapter_signals'] = args.dump_adapter_signals
-    # config['dump_basecalls'] = args.dump_basecalled_events
-    # config['fastq_output'] = args.align is None or args.fastq
     config['fast5_output'] = args.fast5 or args.nanopolish
     config['fast5_batch_size'] = args.fast5_batch_size
-    # config['nanopolish_output'] = args.nanopolish
-    # config['trim_adapter'] = args.trim_adapter
-    # config['minimum_sequence_length'] = args.minimum_length
-    # config['minimap2_index'] = args.align if args.align else None
     config['label_names'], config['barcode_names'], config['output_layout'] = \
         setup_output_name_mapping(config)
     config['nobasecall_stop_trigger'] = 1000
-
-    # fix_options(config)
 
     test_inputs_and_outputs(config)
     create_output_directories(config)
@@ -312,51 +248,24 @@ def __main__():
     group.add_argument('-c', '--config', default='', metavar='NAME',
                        help='path to signal processing configuration')
 
-    # group = parser.add_argument_group('Basic Processing Options')
-    # group.add_argument('--trim-adapter', default=False, action='store_true',
-    #                    help="trim 3' adapter sequences from FASTQ outputs")
-    # group.add_argument('--minimum-length', default=10, type=int, metavar='LEN',
-    #                    help="discard reads shorter than LEN (default: 10)")
-    # group.add_argument('--filter-chimera', default=False, action='store_true',
-    #                    help="remove unsplit reads fused of two or more RNAs in output")
-
     group = parser.add_argument_group('Optional Analyses')
     group.add_argument('--barcoding', default=False, action='store_true',
                        help='sort barcoded reads into separate outputs')
-    # group.add_argument('--barcoding-quality-filter', default=18, type=int, metavar='SCORE',
-    #                    help='ignore barcode patterns having quality scores lower than SCORE '
-    #                         'in phred-scale (default: 18)')
+
     group.add_argument('--polya', default=False, action='store_true',
                        help='output poly(A) tail length measurements')
-    # group.add_argument('--basecall', default=False, action='store_true',
-    #                    help='call the ONT albacore for basecalling on-the-fly')
-    # group.add_argument('--align', default=None, type=str, metavar='INDEXFILE',
-    #                    help='align basecalled reads using minimap2 and create BAM files')
 
     group = parser.add_argument_group('Live Mode')
     group.add_argument('--live', default=False, action='store_true',
                        help='monitor new files in the input directory')
-    # group.add_argument('--live-delay', default=60, type=int, metavar='SECONDS',
-    #                    help='time to delay the start of analysis in live mode '
-    #                         '(default: 60)')
 
     group = parser.add_argument_group('Output Options')
-    # group.add_argument('--fastq', default=False, action='store_true',
-    #                    help='write to FASTQ files even when BAM files are produced')
     group.add_argument('--fast5', default=False, action='store_true',
                        help='link or copy FAST5 files to separate output directories')
     group.add_argument('--fast5-batch-size', default=4000, type=int,
                        help='number of reads in a FAST5 for output')
-    # group.add_argument('--nanopolish', default=False, action='store_true',
-    #                    help='create a nanopolish readdb to enable access from nanopolish')
-    # group.add_argument('--dump-adapter-signals', default=False, action='store_true',
-    #                    help='dump adapter signal dumps for training')
-    # group.add_argument('--dump-basecalled-events', default=False, action='store_true',
-    #                    help='dump basecalled events to the output')
 
     group = parser.add_argument_group('User Interface')
-    # group.add_argument('--dashboard', dest='dashboard', default=False, action='store_true',
-    #                    help="show the full screen dashboard")
     group.add_argument('--contig-aliases', default=None, metavar='FILE', type=str,
                        help='path to a tab-separated text file for aliases to show '
                             'as a contig names in the dashboard (see README)')
@@ -366,8 +275,6 @@ def __main__():
                        help='suppress all questions')
 
     group = parser.add_argument_group('Pipeline Options')
-    group.add_argument('-p', '--parallel', default=1, type=int, metavar='COUNT',
-                       help='number of worker processes (default: 1)')
     group.add_argument('--tmpdir', default='', type=str, metavar='DIR',
                        help='temporary directory for intermediate data')
     group.add_argument('--batch-size', default=128, type=int, metavar='SIZE',

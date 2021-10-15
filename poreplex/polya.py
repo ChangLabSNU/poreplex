@@ -24,8 +24,6 @@ from poreplex.csupport import detect_events
 import numpy as np
 import pandas as pd
 from scipy.signal import medfilt
-from functools import partial
-import os
 
 class PolyASignalAnalyzer:
 
