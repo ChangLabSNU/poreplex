@@ -25,11 +25,9 @@ from itertools import groupby
 import numpy as np
 from io import StringIO
 import traceback
-import h5py
 import sys
 import os
 from .worker_persistence import WorkerPersistenceStorage
-from .utils import union_intervals
 
 __all__ = ['SignalAnalyzer', 'SignalAnalysis', 'process_batch']
 
@@ -70,7 +68,6 @@ class SignalAnalyzer:
         self.config = config
         self.inputdir = config['inputdir']
         self.outputdir = config['outputdir']
-        self.workerid = '23udjdjdj'
         self.batchid = batchid
         self.formatted_batchid = format(batchid, '08d')
         self.open_dumps()
@@ -149,14 +146,6 @@ class SignalAnalyzer:
         self.adapter_dump_file = self.adapter_dump_group = None
         self.basecall_dump_file = self.basecall_dump_group = None
 
-    def open_dump_file(self, subdir, parentgroup):
-        h5filename = os.path.join(self.outputdir, subdir,
-                                  'part-' + self.workerid + '.h5')
-        h5 = h5py.File(h5filename, 'a')
-        h5group = h5.require_group(parentgroup +
-                                   '/' + self.formatted_batchid)
-        return h5, h5group
-
     def __enter__(self):
         return self
 
@@ -225,23 +214,6 @@ class SignalAnalysis:
         else:
             self.npread.set_label('pass')
 
-    def load_events(self):
-        if self.config['albacore_onthefly']: # Call albacore to get basecalls.
-            events = self.npread.call_albacore(self.analyzer.albacore)
-        else: # Load from Analysis/ objects in the FAST5.
-            events = self.npread.load_fast5_events()
-
-        if self.npread.scaling_params is None:
-            raise Exception('Signal scaling is not available yet.')
-
-        events['scaled_mean'] = np.poly1d(self.npread.scaling_params)(events['mean'])
-        events['pos'] = np.cumsum(events['move'])
-
-        duration = np.hstack((np.diff(events['start']), [1])).astype(np.int64)
-        events['end'] = events['start'] + duration
-
-        return events
-
     def detect_segments(self, signal, elspan):
         scan_limit = self.config['segmentation']['segmentation_scan_limit'] // elspan
         if len(signal) > scan_limit:
@@ -261,82 +233,3 @@ class SignalAnalysis:
             sigparts[statename] = (first, last) # right-inclusive
 
         return sigparts
-
-    def detect_unsplit_read(self, events, segments, elspan):
-        # Detect if the read contains two or more adapters in a single read.
-        try:
-            payload_start = (segments['adapter'][1] + 1) * elspan
-        except (KeyError, IndexError):
-            return False # Must be an adapter-only read
-
-        # Bind settings into the local namespace
-        config = self.config['unsplit_read_detection']
-        _ = lambda name, rate=self.npread.sampling_rate: int(config[name] * rate)
-        window_size = _('window_size'); window_step = _('window_step')
-        strict_duration = _('strict_duration')
-        duration_cutoffs = [
-            (_('loosen_full_length'), _('loosen_dna_length')),
-            (_('strict_full_length'), _('strict_dna_length'))]
-
-        excessive_adapters = []
-
-        for left in range(payload_start, events.iloc[-1]['end'], window_step):
-            evblock = events[events['start'].between(left, left + window_size)]
-            if len(evblock) < 1:
-                break
-
-            _, statecalls = self.analyzer.unsplitmodel.viterbi(evblock['scaled_mean'])
-            leader_start = None
-
-            # Find two contiguous states leaders -> adapter and compute sum of the durations
-            for _, positions in groupby(enumerate(statecalls[1:]), lambda st: id(st[1][1])):
-                first, state = last, _ = next(positions)
-                statename = state[1].name
-                if statename not in ('adapter', 'leader-high', 'leader-low'):
-                    leader_start = None
-                    continue
-
-                # Find the last index of matching state calls
-                for last, _ in positions:
-                    pass
-
-                if leader_start is None:
-                    leader_start = first
-
-                if statename != 'adapter':
-                    continue
-
-                adapter_end = int(evblock.iloc[last]['end'])
-                leader_start_in_read = int(evblock.iloc[leader_start]['start'])
-                total_duration = adapter_end - leader_start_in_read
-                adapter_duration = adapter_end - evblock.iloc[first]['start']
-                total_cutoff, adapter_cutoff = duration_cutoffs[
-                        (leader_start_in_read - payload_start) <= strict_duration]
-
-                if total_duration >= total_cutoff and adapter_duration >= adapter_cutoff:
-                    excessive_adapters.append([leader_start_in_read, 1 + adapter_end])
-
-                leader_start = None
-
-        if not excessive_adapters:
-            return False
-
-        adapter_intervals = (
-            [[0, payload_start]] + union_intervals(excessive_adapters)
-            + [[np.inf, np.inf]])
-        basequality_cutoff = config['basecount_quality_limit']
-        count_high_quality_reads = lambda tbl: (
-            (tbl.groupby('pos')['p_model_state'].max()
-                > basequality_cutoff).sum() if len(tbl) >= 0 else 0)
-        subread_lengths = [
-            count_high_quality_reads(events[events['start'].between(left, right)])
-            for (_, left), (right, _) in zip(adapter_intervals[0:], adapter_intervals[1:])]
-
-        subread_hq_length_total = sum(subread_lengths[1:])
-
-        if (subread_hq_length_total > config['subread_basecount_limit'] or
-                (subread_hq_length_total + 1) / (subread_lengths[0] + 1)
-                    > config['subread_baseratio_limit']):
-            return True
-
-        return False

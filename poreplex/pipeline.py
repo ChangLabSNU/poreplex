@@ -70,10 +70,6 @@ class ProcessingSession:
         self.config = config
         self.logger = logger
 
-        self.loop = self.fastq_writer = self.fast5_writer = \
-            self.alignment_writer = self.npreaddb_writer = None
-        self.dashboard = self.pbar = None
-
     def __enter__(self):
         if self.config['fast5_output']:
             self.fast5_writer = FAST5Writer(
@@ -87,25 +83,13 @@ class ProcessingSession:
         return self
 
     def __exit__(self, *args):
-        if self.fastq_writer is not None:
-            self.fastq_writer.close()
-            self.fastq_writer = None
-
         if self.fast5_writer is not None:
             self.fast5_writer.close()
             self.fast5_writer = None
 
-        if self.npreaddb_writer is not None:
-            self.npreaddb_writer.close()
-            self.npreaddb_writer = None
-
         if self.seqsummary_writer is not None:
             self.seqsummary_writer.close()
             self.seqsummary_writer = None
-
-        if self.alignment_writer is not None:
-            self.alignment_writer.close()
-            self.alignment_writer = None
 
     def errx(self, message):
         if self.running:
@@ -114,15 +98,6 @@ class ProcessingSession:
     def show_message(self, message):
         if not self.config['quiet']:
             print(message)
-
-    def run_in_executor_compute(self, *args):
-        return self.loop.run_in_executor(self.executor_compute, *args)
-
-    def run_in_executor_io(self, *args):
-        return self.loop.run_in_executor(self.executor_io, *args)
-
-    def run_in_executor_mon(self, *args):
-        return self.loop.run_in_executor(self.executor_mon, *args)
 
     def run_process_batch(self, batchid, files):
         # Wait until the input files become ready if needed

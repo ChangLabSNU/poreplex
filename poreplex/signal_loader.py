@@ -67,8 +67,7 @@ class NanoporeRead:
 
     fast5 = full_raw_signal = error_message = None
     sequence_length = mean_qscore = num_events = 0
-    sequence = scaling_params = label = barcode = polya = None
-    barcode_bestguess = barcode_quality = None
+    sequence = scaling_params = label = polya = None
 
     def __init__(self, filename, srcdir, read_id):
         self.fullpath = os.path.join(srcdir, filename)
@@ -94,16 +93,6 @@ class NanoporeRead:
 
     def set_label(self, newlabel):
         self.label = newlabel
-
-    def set_barcode(self, newbarcode, guess, quality):
-        self.barcode = newbarcode
-        self.barcode_bestguess = guess
-        self.barcode_quality = quality
-
-    def set_adapter_trimming_length(self, newlength):
-        if self.sequence is None:
-            raise Exception('Sequence is not set.')
-        self.sequence = self.sequence[:2] + (newlength,)
 
     def set_polya_tail(self, polya_info):
         self.polya = polya_info
@@ -141,11 +130,6 @@ class NanoporeRead:
         if self.label is not None:
             rep['label'] = self.label
 
-        if self.barcode is not None:
-            rep['barcode'] = self.barcode
-            rep['barcode_guess'] = self.barcode_bestguess
-            rep['barcode_score'] = self.barcode_quality
-
         if self.polya is not None:
             rep['polya'] = self.polya
 
@@ -162,27 +146,6 @@ class NanoporeRead:
 
         self.fast5 = fast5
         self.sampling_rate = fast5.sampling_rate
-
-    def load_padded_signal_head(self, length_limit, stride, min_length):
-        sigload_length = min(length_limit, self.fast5.duration)
-        sigload_length = sigload_length - sigload_length % stride
-
-        signal = self.fast5.get_raw_data(end=sigload_length)
-        if len(signal) % stride > 0:
-            signal = signal[:-(len(signal) % stride)]
-
-        if len(signal) < min_length:
-            self.set_status('scaler_signal_too_short', stop=True)
-            return
-
-        signal_means = signal.reshape([len(signal) // stride, stride]
-                                      ).mean(axis=1, dtype=np.float32)
-        length_limit //= stride
-        if len(signal_means) < length_limit:
-            signal_means = np.pad(signal_means, [length_limit - len(signal_means), 0],
-                                  'constant')
-
-        return signal_means
 
     def load_signal(self, end=None, pool=None, pad=False, scale=True):
         # Load from the cache if available
@@ -216,33 +179,3 @@ class NanoporeRead:
             return np.poly1d(self.scaling_params)(sig)
         else:
             return sig
-
-    def load_fast5_events(self):
-        if self.fast5 is None:
-            raise Exception('Fast5 must be open for getting events.')
-
-        bcall = self.fast5.get_basecall()
-        if bcall is None:
-            raise SignalAnalysisError('not_basecalled')
-
-        self.sequence_length = bcall['sequence_length']
-        self.mean_qscore = bcall['mean_qscore']
-        self.num_events = bcall['num_events']
-        self.sequence = bcall['sequence'], bcall['qstring'], 0
-
-        return bcall['events']
-
-    def call_albacore(self, albacore):
-        rawdata = self.load_signal(pool=False, scale=False)
-        bcall = albacore.basecall(
-                    rawdata, self.fast5,
-                    os.path.basename(self.filename).rsplit('.', 1)[0])
-        if bcall is None:
-            raise SignalAnalysisError('not_basecalled')
-
-        self.sequence_length = bcall['sequence_length']
-        self.mean_qscore = bcall['mean_qscore']
-        self.num_events = bcall['called_events']
-        self.sequence = bcall['sequence'], bcall['qstring'], 0
-
-        return bcall['events']

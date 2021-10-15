@@ -37,8 +37,9 @@ class WorkerPersistenceStorage:
     STORAGE_NAME = '__poreplex_persistence'
     MODCACHE_SPACE = sys.modules
     VARIABLES = [
-        'segmodel', 'unsplitmodel', 'kmermodel', 'kmersize', 'loader',
-        'demuxer', 'albacore', 'polyaanalyzer']
+        'segmodel', 
+        'kmermodel', 'kmersize', 'loader',
+        'polyaanalyzer']
 
     def __init__(self, config):
         self.config = config
@@ -60,7 +61,6 @@ class WorkerPersistenceStorage:
     def init_persistence_objects(self, config):
         storage = {
             'segmodel': load_segmentation_model(config['segmentation_model']),
-            'unsplitmodel': load_segmentation_model(config['unsplit_read_detection_model']),
             'kmermodel': pd.read_csv(config['kmer_model'], header=0, index_col=0, sep='\t'),
         }
         storage['kmersize'] = len(storage['kmermodel'].index[0])
